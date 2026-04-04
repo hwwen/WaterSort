@@ -3,8 +3,97 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>水管排序遊戲 - 響應式修復版</title>
+    <title>水管排序遊戲</title>
     <style>
+    body { 
+        font-family: "Microsoft JhengHei", sans-serif; 
+        text-align: center; 
+        background: #eef2f7; 
+        margin: 0; 
+        padding: env(safe-area-inset-top) 10px env(safe-area-inset-bottom) 10px; 
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        height: 100vh; /* 固定高度為視窗高度 */
+    }
+
+    h1 { margin: 10px 0 5px; font-size: 1.4rem; flex-shrink: 0; }
+    h2 { font-size: 1rem; color: #666; margin-bottom: 10px; flex-shrink: 0; }
+    
+    #game { 
+        display: flex; 
+        flex-wrap: wrap; 
+        justify-content: center; 
+        align-content: center; /* 垂直居中 */
+        gap: 15px; 
+        padding-top: 40px; 
+        max-width: 800px;
+        margin: 0 auto;
+        flex-grow: 1; /* 讓遊戲區域自動撐開佔據剩餘空間 */
+        min-height: 50vh; /* 確保至少佔據一半畫面 */
+    }
+    
+    .tube {
+        /* 關鍵修正：寬度與高度隨螢幕高度縮放 */
+        width: 12vw; 
+        max-width: 65px;
+        min-width: 45px;
+        height: 35vh; /* 試管高度佔螢幕高度的 35% */
+        max-height: 220px;
+        
+        border: 3px solid #444; 
+        border-bottom-left-radius: 25px; 
+        border-bottom-right-radius: 25px;
+        background: #fff; 
+        display: flex; 
+        flex-direction: column-reverse;
+        cursor: pointer; 
+        position: relative; 
+        transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+        z-index: 1;
+        overflow: hidden;
+        box-sizing: border-box;
+        transform-origin: top center;
+    }
+
+    /* 選中時浮起距離也改用 vh，確保比例一致 */
+    .tube.selected {
+        transform: translateY(-5vh);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.15);
+        z-index: 10;
+    }
+
+    .layer {
+        width: 100%;
+        height: 25%;
+        border-top: 1px solid rgba(255,255,255,0.2);
+    }
+
+    .controls { 
+        padding: 20px 0;
+        display: flex;
+        justify-content: center;
+        gap: 15px;
+        flex-shrink: 0;
+    }
+    
+    button { 
+        padding: 12px 0; 
+        font-size: 16px; 
+        cursor: pointer; 
+        border-radius: 30px; 
+        border: 2px solid #444; 
+        background: white; 
+        font-weight: bold;
+        width: 120px;
+    }
+
+    /* 針對橫向螢幕或較大裝置調整 */
+    @media (min-height: 800px) {
+        .tube { height: 40vh; }
+    }
+</style>
+
         body { 
             font-family: "Microsoft JhengHei", sans-serif; 
             text-align: center; 
