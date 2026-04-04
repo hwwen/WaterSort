@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>水管排序遊戲 - 進階動畫版</title>
+    <style>
+        body { 
+            font-family: "Microsoft JhengHei", sans-serif; 
+            text-align: center; 
+            background: #eef2f7; 
+            margin: 0; 
+            padding: 20px; 
+            overflow-x: hidden; 
+        }
+
+        h1 { margin-top: 10px; color: #333; }
+        
+        #game { 
+            display: flex; 
+            flex-wrap: wrap; 
+            justify-content: center; 
+            gap: 40px; 
+            margin-top: 100px; /* 預留上方空間給飛起的試管 */
+            position: relative; 
+            min-height: 300px;
+        }
+        
+        .tube {
+            width: 50px; 
+            height: 180px; 
+            border: 3px solid #444; 
+            border-bottom-left-radius: 30px; 
+            border-bottom-right-radius: 30px;
+            background: rgba(255,255,255,0.9); 
+            display: flex; 
+            flex-direction: column-reverse;
+            cursor: pointer; 
+            position: relative; 
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s;
+            z-index: 1;
+            overflow: hidden; /* 修正底部破圖關鍵 */
+            box-sizing: border-box;
+            transform-origin: top center; /* 讓旋轉支點在瓶口 */
+        }
+
+        /* 瓶口裝飾線 */
+        .tube::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 6px;
+            background: rgba(0,0,0,0.1);
+        }
+
+        /* 選中時輕微浮起準備移動 */
+        .tube.selected {
+            transform: translateY(-40px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+
+        .layer {
+            width: 100%;
+            height: 25%;
+            transition: height 0.3s ease;
+            border-top: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .controls { margin-top: 40px; }
+        
+        button { 
+            padding: 12px 28px; 
+            margin: 0 10px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            border-radius: 30px; 
+            border: 2px solid #444; 
+            background: white; 
+            font-weight: bold;
+            transition: 0.2s;
+        }
+        button:hover { background: #444; color: white; }
+    </style>
+</head>
+<body>
+
+    <h1>倒水排序遊戲</h1>
+    <h2 id="levelText">Level 1</h2>
+
+    <div id="game"></div>
+
+    <div class="controls">
+        <button onclick="undo()">撤銷上一步</button>
+        <button onclick="restart()">重新開始</button>
+    </div>
+
+<script>
+    let level = Number(localStorage.getItem("waterSortLevel")) || 1;
+    let tubesData = [];
+    let history = [];
+    let selectedIdx = null;
+    let isAnimating = false;
+
+    const COLORS = [
+        "#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6",
+        "#e67e22", "#1abc9c", "#ff66cc", "#7f8c8d", "#34495e",
+        "#d35400", "#27ae60"
+    ];
+
+    function initGame() {
+        tubesData = generateLevel(level);
+        history = [];
+        selectedIdx = null;
+        isAnimating = false;
+        render();
+    }
+
+    function generateLevel(lvl) {
+        let colorCount = Math.min(3 + Math.floor((lvl - 1) / 4), COLORS.length);
+        let allColors = [];
+        for (let i = 0; i < colorCount; i++) {
+            for (let j = 0; j < 4; j++) allColors.push(i);
+        }
+        // 隨機洗牌
+        allColors.sort(() => Math.random() - 0.5);
+        
+        let newTubes = [];
+        for (let i = 0; i < colorCount; i++) {
+            newTubes.push(allColors.slice(i * 4, i * 4 + 4));
+        }
+        newTubes.push([], []); // 增加兩個空管
+        return newTubes;
+    }
+
+    function render() {
+        const game = document.getElementById("game");
+        game.innerHTML = "";
+        document.getElementById("levelText").innerText = "Level " + level;
+
+        tubesData.forEach((tube, i) => {
+            let div = document.createElement("div");
+            div.className = "tube" + (selectedIdx === i ? " selected" : "");
+            div.id = "tube-" + i;
+            div.onclick = () => handleTubeClick(i);
+
+            tube.forEach(colorIdx => {
+                let layer = document.createElement("div");
+                layer.className = "layer";
+                layer.style.backgroundColor = COLORS[colorIdx];
+                div.appendChild(layer);
+            });
+            game.appendChild(div);
+        });
+    }
+
+    async function handleTubeClick(i) {
+        if (isAnimating) return;
+
+        if (selectedIdx === null) {
+            if (tubesData[i].length > 0) {
+                selectedIdx = i;
+                render();
+            }
+        } else {
+            if (selectedIdx === i) {
+                selectedIdx = null;
+                render();
+                return;
+            }
+
+            if (canPour(selectedIdx, i)) {
+                await animatePour(selectedIdx, i);
+            } else {
+                // 如果不能倒水，則改選目前的試管
+                selectedIdx = tubesData[i].length > 0 ? i : null;
+                render();
+            }
+        }
+    }
+
+    function canPour(from, to) {
+        let f = tubesData[from], t = tubesData[to];
+        if (f.length === 0 || t.length === 4) return false;
+        if (t.length === 0) return true;
+        return f[f.length - 1] === t[t.length - 1];
+    }
+
+    async function animatePour(fromIdx, toIdx) {
+        isAnimating = true;
+        const fromEl = document.getElementById(`tube-${fromIdx}`);
+        const toEl = document.getElementById(`tube-${toIdx}`);
+        
+        const fromRect = fromEl.getBoundingClientRect();
+        const toRect = toEl.getBoundingClientRect();
+        
+        // 紀錄目前的狀態到歷史
+        history.push(JSON.parse(JSON.stringify(tubesData)));
+
+        // 1. 計算位移：讓瓶口(Top)對齊目標瓶口(Top)
+        // 稍微往上位移 10px 避開邊框重疊
+        const deltaX = toRect.left - fromRect.left;
+        const deltaY = toRect.top - fromRect.top - 10; 
+
+        // 移動到目標瓶口
+        fromEl.style.zIndex = "100";
+        fromEl.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(0deg)`;
+        
+        await new Promise(r => setTimeout(r, 500)); 
+
+        // 2. 旋轉倒水（以瓶口為支點）
+        const rotateDeg = deltaX > 0 ? 80 : -80; // 根據目標方向決定往哪倒
+        fromEl.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${rotateDeg}deg)`;
+        
+        await new Promise(r => setTimeout(r, 600)); 
+
+        // 3. 轉移顏色數據
+        let targetColor = tubesData[fromIdx][tubesData[fromIdx].length - 1];
+        while (canPour(fromIdx, toIdx) && tubesData[fromIdx][tubesData[fromIdx].length - 1] === targetColor) {
+            tubesData[toIdx].push(tubesData[fromIdx].pop());
+        }
+
+        // 4. 更新畫面並檢查過關
+        selectedIdx = null;
+        render(); 
+        
+        if (checkWin()) {
+            setTimeout(() => {
+                level++;
+                localStorage.setItem("waterSortLevel", level);
+                initGame();
+            }, 400);
+        }
+        
+        isAnimating = false;
+    }
+
+    function checkWin() {
+        return tubesData.every(t => 
+            t.length === 0 || (t.length === 4 && t.every(c => c === t[0]))
+        );
+    }
+
+    function undo() {
+        if (isAnimating || history.length === 0) return;
+        tubesData = history.pop();
+        selectedIdx = null;
+        render();
+    }
+
+    function restart() {
+        if (isAnimating) return;
+        initGame();
+    }
+
+    // 啟動遊戲
+    initGame();
+</script>
+
+</body>
+</html>
