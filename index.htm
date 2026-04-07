@@ -4,311 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>水管排序遊戲</title>
-    <style>
-        /* === 基礎版面樣式 === */
-        body { 
-            font-family: "Microsoft JhengHei", sans-serif; 
-            text-align: center; 
-            background: #eef2f7; 
-            margin: 0; 
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
-            overflow: hidden; 
-        }
-
-        h1 { margin: 10px 0 5px; font-size: 1.4rem; }
-        h2 { font-size: 1rem; color: #666; margin-bottom: 10px; }
-        
-        /* 管理員面板 (Konami Code) */
-        #adminPanel {
-            display: none; 
-            background: #34495e; color: white; padding: 10px; border-radius: 10px;
-            margin: 5px auto; max-width: 320px; z-index: 2000;
-        }
-        #adminPanel input { width: 60px; text-align: center; border-radius: 5px; border: none; }
-        #adminPanel button { background: #e67e22; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
-
-        /* 遊戲區域佈局 */
-        #game { 
-            display: flex; flex-wrap: wrap; justify-content: center; align-content: center;
-            gap: 15px; padding-top: 20px; max-width: 800px; margin: 0 auto; flex-grow: 1;
-        }
-        
-        /* 試管造型與動畫 */
-        .tube {
-            width: 12vw; max-width: 65px; min-width: 45px; height: 35vh; max-height: 220px;
-            border: 3px solid #444; border-bottom-left-radius: 25px; border-bottom-right-radius: 25px;
-            background: #fff; display: flex; flex-direction: column-reverse; /* 層級由下往上排 */
-            cursor: pointer; position: relative; transition: transform 0.4s;
-            overflow: hidden; box-sizing: border-box; transform-origin: top center;
-        }
-
-        /* 選中與提示效果 */
-        .tube.selected { transform: translateY(-5vh); box-shadow: 0 10px 20px rgba(0,0,0,0.15); z-index: 10; }
-        .tube.hint { animation: shake 0.5s infinite; border-color: #e67e22; box-shadow: 0 0 15px #e67e22; }
-        @keyframes shake { 0%, 100% { transform: rotate(0deg); } 25% { transform: rotate(5deg); } 75% { transform: rotate(-5deg); } }
-
-        .layer { width: 100%; height: 25%; border-top: 1px solid rgba(255,255,255,0.2); }
-
-        .controls { padding: 20px 0; display: flex; justify-content: center; gap: 15px; }
-        .main-btn { padding: 12px 20px; font-size: 16px; cursor: pointer; border-radius: 30px; border: 2px solid #444; background: white; font-weight: bold; }
-
-        /* 救援對話框 */
-        #modalOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; justify-content: center; align-items: center; z-index: 1000; }
-        #modalContent { background: white; padding: 30px; border-radius: 20px; width: 80%; max-width: 350px; text-align: center; }
-        .btn-pay { background: #27ae60; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        .btn-cancel { background: #bdc3c7; color: white; border: none; padding: 10px 20px; border-radius: 10px; font-weight: bold; cursor: pointer; }
-    </style>
+    <!-- 引入外部 CSS 檔案 -->
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
     <h1>倒水排序</h1>
     <h2 id="levelText">Level 1</h2>
 
-    <!-- 管理員專區 -->
+    <!-- 管理員跳關面板 (透過 Konami Code 解鎖) -->
     <div id="adminPanel">
         🔑 管理員：跳至第 <input type="number" id="targetLevel" min="1" value="1"> 關
-        <button onclick="jumpToLevel()">確認跳轉</button>
+        <button id="adminJumpBtn">確認跳轉</button>
     </div>
 
+    <!-- 遊戲試管動態生成區域 -->
     <div id="game"></div>
 
+    <!-- 底部操作按鈕 -->
     <div class="controls">
-        <button class="main-btn" onclick="undo()">撤銷</button>
-        <button class="main-btn" onclick="restart()">重玩</button>
+        <button class="main-btn" id="undoBtn">撤銷</button>
+        <button class="main-btn" id="restartBtn">重玩</button>
     </div>
 
-    <!-- 救援視窗 -->
+    <!-- 死局救援對話框 (動態注入 Div) -->
     <div id="modalOverlay">
         <div id="modalContent">
-            <div style="font-weight:bold; color:#d35400; margin-bottom:10px; font-size:1.2rem;">💰 死局救援</div>
-            <div style="margin-bottom:20px; color:#555;">檢測到死局！支付 30 金幣<br>直接在「目前位置」增加一個空瓶？</div>
-            <div style="display:flex; gap:10px; justify-content:center;">
-                <button class="btn-pay" onclick="confirmPayment()">確認支付</button>
-                <button class="btn-cancel" onclick="hideModal()">不用，我重玩</button>
+            <div class="modal-header">💰 死局救援</div>
+            <div class="modal-body">
+                目前的局面已無法移動。<br>
+                支付 30 金幣在「目前位置」增加一個空瓶嗎？
+            </div>
+            <div class="modal-footer">
+                <button class="btn-pay" id="payBtn">確認支付</button>
+                <button class="btn-cancel" id="cancelBtn">不用，我重玩</button>
             </div>
         </div>
     </div>
 
-<script>
-    /* ==========================================
-       1. 初始化變數與設定
-       ========================================== */
-    let level = Number(localStorage.getItem("waterSortLevel")) || 1;
-    let tubesData = [];       // 二維陣列儲存數據
-    let history = [];         // 撤銷紀錄
-    let selectedIdx = null;   // 選中的索引
-    let isAnimating = false;  // 動畫鎖
-    let hasBoughtExtraTube = false; // 每關限購一次
-    let idleTimer = null;     // 10秒閒置提示計時器
-
-    const COLORS = ["#e74c3c", "#3498db", "#2ecc71", "#f1c40f", "#9b59b6", "#e67e22", "#1abc9c", "#ff66cc", "#7f8c8d", "#34495e"];
-
-    /** 重設計時器：當玩家有操作、動畫結束、或進入新關卡時呼叫 **/
-    function resetIdleTimer() {
-        document.querySelectorAll('.tube.hint').forEach(el => el.classList.remove('hint'));
-        clearTimeout(idleTimer);
-        if (!isAnimating) idleTimer = setTimeout(showHint, 10000);
-    }
-
-    /** 提示邏輯：找出第一個有效步法並晃動該試管 **/
-    function showHint() {
-        const move = findValidMove();
-        if (move) {
-            const el = document.getElementById(`tube-${move.from}`);
-            if (el) el.classList.add('hint');
-        }
-    }
-
-    /* ==========================================
-       2. 核心演算法：判定有效移動與死局
-       ========================================== */
-
-    function findValidMove() {
-        for (let i = 0; i < tubesData.length; i++) {
-            for (let j = 0; j < tubesData.length; j++) {
-                if (i !== j && isValidMove(i, j)) return { from: i, to: j };
-            }
-        }
-        return null;
-    }
-
-    /** 
-     * 深度判定邏輯：
-     * 1. 排除「純色搬家」(把整瓶同色的倒進空管)
-     * 2. 排除「無意義轉移」(目標管空位裝不完頂部顏色，且來源管倒完後不會變空)
-     **/
-    function isValidMove(from, to) {
-        const f = tubesData[from], t = tubesData[to];
-        if (!f || f.length === 0 || !t || t.length === 4) return false;
-
-        const topColor = f[f.length - 1];
-        let sourceContinuousCount = 0; // 計算來源瓶頂部連續同色層數
-        for (let i = f.length - 1; i >= 0; i--) {
-            if (f[i] === topColor) sourceContinuousCount++;
-            else break;
-        }
-
-        const targetFreeSpace = 4 - t.length; // 目標管剩餘空間
-
-        // 規則 A：頂部顏色不符
-        if (t.length > 0 && t[t.length - 1] !== topColor) return false;
-        
-        // 規則 B：目標是空瓶，若來源是純色瓶則無效
-        if (t.length === 0) return f.length !== sourceContinuousCount;
-
-        // 規則 C：頂部同色
-        if (t[t.length - 1] === topColor) {
-            // 如果空位裝不完那疊同色水，且來源管倒完後下方還有顏色，這步對解局無幫助
-            if (targetFreeSpace < sourceContinuousCount && f.length > sourceContinuousCount) return false;
-            return true;
-        }
-        return false;
-    }
-
-    function checkGameOver() { return findValidMove() === null; }
-
-    /* ==========================================
-       3. 遊戲流程與救援控制
-       ========================================== */
-
-    /** 增加空瓶邏輯：保留目前盤面，僅在最後方新增一個空陣列 **/
-    function confirmPayment() {
-        hideModal();
-        setTimeout(() => {
-            alert("騙你的！這遊戲不用錢，送你一個空瓶救急！🎁");
-            tubesData.push([]); // 直接在現有棋局增加空瓶
-            hasBoughtExtraTube = true;
-            render(); 
-            resetIdleTimer();
-        }, 300);
-    }
-
-    function showModal() { document.getElementById("modalOverlay").style.display = "flex"; }
-    function hideModal() { document.getElementById("modalOverlay").style.display = "none"; }
-
-    /** 基礎物理判定：顏色是否匹配 **/
-    function canPour(from, to) {
-        const f = tubesData[from], t = tubesData[to];
-        if (!f || f.length === 0 || !t || t.length === 4) return false;
-        return t.length === 0 || f[f.length - 1] === t[t.length - 1];
-    }
-
-    /** 倒水動畫邏輯 **/
-    async function animatePour(fromIdx, toIdx) {
-        isAnimating = true;
-        clearTimeout(idleTimer);
-        const fromEl = document.getElementById(`tube-${fromIdx}`);
-        const toEl = document.getElementById(`tube-${toIdx}`);
-        
-        history.push(JSON.parse(JSON.stringify(tubesData)));
-        
-        const deltaX = toEl.getBoundingClientRect().left - fromEl.getBoundingClientRect().left;
-        const deltaY = toEl.getBoundingClientRect().top - fromEl.getBoundingClientRect().top - 15;
-        fromEl.style.zIndex = "100";
-        fromEl.style.transform = `translate(${deltaX}px, ${deltaY}px) rotate(${deltaX > 0 ? 85 : -85}deg)`;
-        
-        await new Promise(r => setTimeout(r, 600));
-
-        let targetColor = tubesData[fromIdx][tubesData[fromIdx].length - 1];
-        while (canPour(fromIdx, toIdx) && tubesData[fromIdx][tubesData[fromIdx].length - 1] === targetColor) {
-            tubesData[toIdx].push(tubesData[fromIdx].pop());
-        }
-        
-        selectedIdx = null;
-        render(); 
-
-        // 檢查是否勝利
-        const isWin = tubesData.every(t => t.length === 0 || (t.length === 4 && t.every(c => c === t[0])));
-        
-        if (isWin) {
-            // [需求優化]：過關不用跳 alert，延遲 0.5s 後直接進下一關
-            setTimeout(() => { 
-                level++; 
-                localStorage.setItem("waterSortLevel", level); 
-                initGame(); 
-            }, 500);
-        } else if (checkGameOver()) {
-            setTimeout(() => { 
-                if (!hasBoughtExtraTube) showModal(); 
-                else alert("此關已無解，請重玩！"); 
-            }, 500);
-        }
-        isAnimating = false;
-        resetIdleTimer();
-    }
-
-    /* ==========================================
-       4. 基礎功能 (渲染/生成/密技)
-       ========================================== */
-
-    function render() {
-        const game = document.getElementById("game");
-        game.innerHTML = "";
-        document.getElementById("levelText").innerText = "Level " + level;
-        tubesData.forEach((tube, i) => {
-            let div = document.createElement("div");
-            div.className = "tube" + (selectedIdx === i ? " selected" : "");
-            div.id = "tube-" + i;
-            div.onclick = () => { resetIdleTimer(); handleTubeClick(i); };
-            tube.forEach(colorIdx => {
-                let layer = document.createElement("div");
-                layer.className = "layer";
-                layer.style.backgroundColor = COLORS[colorIdx];
-                div.appendChild(layer);
-            });
-            game.appendChild(div);
-        });
-    }
-
-    async function handleTubeClick(i) {
-        if (isAnimating) return;
-        if (selectedIdx === null) {
-            if (tubesData[i].length > 0) { selectedIdx = i; render(); }
-        } else {
-            if (selectedIdx === i) { selectedIdx = null; render(); return; }
-            if (canPour(selectedIdx, i)) await animatePour(selectedIdx, i);
-            else { selectedIdx = tubesData[i].length > 0 ? i : null; render(); }
-        }
-    }
-
-    const secret = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a", "b", "a"];
-    let input = [];
-    window.addEventListener('keydown', (e) => {
-        resetIdleTimer();
-        input.push(e.key.toLowerCase());
-        input = input.slice(-12);
-        if (input.join(',') === secret.join(',')) { document.getElementById('adminPanel').style.display = 'block'; }
-    });
-
-    function jumpToLevel() { level = parseInt(document.getElementById('targetLevel').value); localStorage.setItem("waterSortLevel", level); initGame(); document.getElementById('adminPanel').style.display = 'none'; }
-    function undo() { if (!isAnimating && history.length > 0) { tubesData = history.pop(); selectedIdx = null; render(); resetIdleTimer(); } }
-    function restart() { if (!isAnimating) initGame(); }
-    
-    function initGame() { 
-        tubesData = generateLevel(level); 
-        history = []; 
-        selectedIdx = null; 
-        hasBoughtExtraTube = false; 
-        render(); 
-        resetIdleTimer(); 
-    }
-
-    function generateLevel(lvl) {
-        let colorCount = Math.min(3 + Math.floor((lvl - 1) / 4), COLORS.length);
-        let allColors = [];
-        for (let i = 0; i < colorCount; i++) {
-            for (let j = 0; j < 4; j++) allColors.push(i);
-        }
-        allColors.sort(() => Math.random() - 0.5);
-        let newTubes = [];
-        for (let i = 0; i < colorCount; i++) newTubes.push(allColors.slice(i * 4, i * 4 + 4));
-        newTubes.push([], []); 
-        return newTubes;
-    }
-
-    initGame();
-</script>
+    <!-- 引入外部 JavaScript 檔案 -->
+    <script src="script.js"></script>
 </body>
 </html>
